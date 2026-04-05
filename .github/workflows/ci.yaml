@@ -4,16 +4,17 @@ on:
   push:
     branches:
       - main
+      - trivy
 
 env:
   IMAGE_NAME: webapp-ci-cd
-  IMAGE_TAG: 1.0.1.2
+  IMAGE_TAG: 1.0.2.
   DOCKER_REGISTRY: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
 
   # ===============================
-  # JOB 1 - CI : BUILD + PUSH + SCAN
+  # JOB 1 - CI : BUILD + PUSH
   # ===============================
   ci:
     runs-on: ubuntu-latest
@@ -46,17 +47,32 @@ jobs:
           docker push ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
   # ===============================
-  # JOB 2 - CD : DEPLOY
+  # JOB 2 - SCAN SÉCURITÉ : TRIVY
   # ===============================
-  deploy:
+  scan-trivy:
     needs: ci
-    runs-on:  ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Pull latest image
-        run: |
-          echo "Hello deploy"
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+
+  # ===============================
+  # JOB 3 - CD : DEPLOY
+  # ===============================
+  deploy:
+    needs: scan-trivy
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Pull latest image
         run: |
           docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
